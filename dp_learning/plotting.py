@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable, List
 
 import numpy as np
@@ -28,7 +29,13 @@ def logs_to_df(logs: Iterable[ExperimentLog]) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def plot_acc_vs_epsilon(df: pd.DataFrame, dataset: str, epsilon_column: str = "agg_epsilon"):
+def plot_acc_vs_epsilon(
+    df: pd.DataFrame,
+    dataset: str,
+    epsilon_column: str = "agg_epsilon",
+    save_path: str | Path | None = None,
+    show: bool = True,
+):
     if epsilon_column not in df.columns:
         raise ValueError(f"Column '{epsilon_column}' not found in dataframe")
 
@@ -46,7 +53,12 @@ def plot_acc_vs_epsilon(df: pd.DataFrame, dataset: str, epsilon_column: str = "a
     plt.ylabel("Test accuracy")
     plt.title(f"{dataset}: Accuracy vs Privacy Budget")
     plt.tight_layout()
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 
 def plot_learning_curve(
@@ -54,6 +66,8 @@ def plot_learning_curve(
     dataset: str,
     method: str,
     agg_epsilon: float,
+    save_path: str | Path | None = None,
+    show: bool = True,
 ):
     curves = [
         log
@@ -78,4 +92,9 @@ def plot_learning_curve(
     plt.title(f"{dataset} Learning Curve (ε={agg_epsilon})")
     plt.legend()
     plt.tight_layout()
-    plt.show()
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+    else:
+        plt.close()
