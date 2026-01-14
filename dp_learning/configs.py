@@ -53,3 +53,4 @@ class LearningConfig:
     loss_fn: Any
     optimizer_class: Any
     optimizer_kwargs: Optional[Dict[str, Any]] = None
+    log_every: Optional[int] = None

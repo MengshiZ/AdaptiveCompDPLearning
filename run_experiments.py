@@ -34,6 +34,7 @@ def run_experiments(
     lr: float,
     max_grad_norm: float,
     dp_mechanism: str,
+    log_every: int | None,
     seeds: Iterable[int],
     output_dir: Path,
 ) -> None:
@@ -53,6 +54,7 @@ def run_experiments(
                     max_grad_norm=max_grad_norm,
                     dp_mechanism=dp_mechanism,
                     seed=seed,
+                    log_every=log_every,
                 )
                 _, log = run_vision_experiment(config)
                 logs.append(log)
@@ -72,6 +74,7 @@ def run_experiments(
                     max_grad_norm=max_grad_norm,
                     dp_mechanism=dp_mechanism,
                     seed=seed,
+                    log_every=log_every,
                 )
                 _, log = run_vision_experiment(config)
                 logs.append(log)
@@ -126,6 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--dp-mechanism", default="Naive")
+    parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--seeds", default="0", help="Comma-separated list of seeds.")
     parser.add_argument("--output-dir", default="runs")
     return parser
@@ -151,6 +155,7 @@ def main() -> None:
         lr=args.lr,
         max_grad_norm=args.max_grad_norm,
         dp_mechanism=args.dp_mechanism,
+        log_every=args.log_every,
         seeds=seeds,
         output_dir=Path(args.output_dir),
     )

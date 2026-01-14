@@ -29,6 +29,7 @@ class VisionExperimentConfig:
     seed: int = 0
     max_grad_norm: float = 1.0
     dp_mechanism: str = "Naive"
+    log_every: int | None = 50
     device: str | None = None
 
 
@@ -168,9 +169,16 @@ def run_experiment(
             trainer.reset_presum()
 
         total_loss = 0.0
-        for x, y in train_loader:
+        for batch_idx, (x, y) in enumerate(train_loader, start=1):
             loss = trainer.train_batch(x, y, config.loss_fn)
             total_loss += loss
+            if config.log_every and batch_idx % config.log_every == 0:
+                avg_so_far = total_loss / batch_idx
+                print(
+                    f"Epoch {epoch}/{config.epochs} | "
+                    f"Batch {batch_idx}/{len(train_loader)} | "
+                    f"Avg loss: {avg_so_far:.4f}"
+                )
 
         avg_loss = total_loss / len(train_loader)
 
@@ -209,6 +217,7 @@ def run_vision_experiment(config: VisionExperimentConfig):
         optimizer_class=torch.optim.SGD,
         optimizer_kwargs={},
         max_grad_norm=config.max_grad_norm,
+        log_every=config.log_every,
     )
 
     log = ExperimentLog(
