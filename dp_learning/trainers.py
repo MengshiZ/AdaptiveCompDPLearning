@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import gc
 
-import numpy as np
 import torch
 from torch.func import functional_call, grad, vmap
 
@@ -25,47 +24,13 @@ class NormalTrainer:
     def train_batch(self, x: torch.Tensor, y: torch.Tensor, loss_fn) -> float:
         self.model.train()
         x, y = x.to(self.device), y.to(self.device)
-        batch_size = x.shape[0]
-
-        params_dict = dict(self.model.named_parameters())
-        buffers_dict = dict(self.model.named_buffers())
-        param_names = list(params_dict.keys())
-
-        def loss_per_sample(params, buffers, x_s, y_s):
-            preds = functional_call(self.model, (params, buffers), (x_s.unsqueeze(0),))
-            loss = loss_fn(preds, y_s.unsqueeze(0))
-            return loss.mean()
-
-        with torch.no_grad():
-            report_loss = loss_fn(self.model(x), y).item()
-
-        grad_fn = grad(loss_per_sample)
-        per_sample_grads = vmap(grad_fn, in_dims=(None, None, 0, 0))(
-            params_dict,
-            buffers_dict,
-            x,
-            y,
-        )
-
-        flat_list = [per_sample_grads[name].reshape(batch_size, -1) for name in param_names]
-        flat = torch.cat(flat_list, dim=1)
-
-        norms = flat.norm(2, dim=1)
-        factors = torch.clamp(self.max_grad_norm / (norms + 1e-6), max=1.0)
-        flat = flat * factors.unsqueeze(1)
-        avg = flat.mean(dim=0)
 
         self.optimizer.zero_grad(set_to_none=True)
-        idx = 0
-        for name in param_names:
-            p = params_dict[name]
-            n = p.numel()
-            g = avg[idx : idx + n].reshape_as(p)
-            p.grad = g.detach().clone()
-            idx += n
-
+        logits = self.model(x)
+        loss = loss_fn(logits, y)
+        loss.backward()
         self.optimizer.step()
-        return report_loss
+        return float(loss.item())
 
 
 class DPSGDTrainer:
