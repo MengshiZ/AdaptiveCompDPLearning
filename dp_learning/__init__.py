@@ -6,7 +6,7 @@ from .dp_queries import DPPreSumQuery, NaiveDPQuery
 from .experiment import run_experiment, run_vision_experiment
 from .models import MLP, SimpleCNN
 from .plotting import logs_to_df, plot_acc_vs_epsilon, plot_learning_curve
-from .trainers import DPSGDTrainer, NormalTrainer
+from .trainers import DPSGDTrainer, NormalTrainer, StandardSGD
 from .utils import set_seed
 
 __all__ = [
@@ -25,5 +25,6 @@ __all__ = [
     "plot_learning_curve",
     "DPSGDTrainer",
     "NormalTrainer",
+    "StandardSGD",
     "set_seed",
 ]

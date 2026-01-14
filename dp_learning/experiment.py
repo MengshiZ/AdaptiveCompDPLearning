@@ -11,7 +11,7 @@ from .configs import ExperimentLog, LearningConfig, METHOD_CONFIGS
 from .data import make_train_loader
 from .eval import test_model
 from .models import SimpleCNN
-from .trainers import DPSGDTrainer, NormalTrainer
+from .trainers import DPSGDTrainer, NormalTrainer, StandardSGD
 from .utils import set_seed
 
 
@@ -143,13 +143,21 @@ def run_experiment(
             f"random_batch={random_batch}, agg_epsilon={log.agg_epsilon}, agg_delta={log.agg_delta}"
         )
     else:
-        trainer = NormalTrainer(
-            model=model,
-            optimizer=optimizer,
-            device=config.device,
-            max_grad_norm=config.max_grad_norm,
-        )
-        print("Running baseline (non-DP)")
+        if log.method == "StandardSGD":
+            trainer = StandardSGD(
+                model=model,
+                optimizer=optimizer,
+                device=config.device,
+            )
+            print("Running StandardSGD (non-DP)")
+        else:
+            trainer = NormalTrainer(
+                model=model,
+                optimizer=optimizer,
+                device=config.device,
+                max_grad_norm=config.max_grad_norm,
+            )
+            print("Running baseline (non-DP)")
 
     model.to(config.device)
 

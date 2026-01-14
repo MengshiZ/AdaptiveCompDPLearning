@@ -8,6 +8,30 @@ from torch.func import functional_call, grad, vmap
 from .dp_queries import DPPreSumQuery, NaiveDPQuery
 
 
+class StandardSGD:
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: str = "cpu",
+    ) -> None:
+        self.model = model.to(device)
+        self.optimizer = optimizer
+        self.device = device
+
+    def train_batch(self, x: torch.Tensor, y: torch.Tensor, loss_fn) -> float:
+        self.model.train()
+        x, y = x.to(self.device), y.to(self.device)
+
+        self.optimizer.zero_grad(set_to_none=True)
+        preds = self.model(x)
+        loss = loss_fn(preds, y)
+        loss.backward()
+        self.optimizer.step()
+
+        return float(loss.item())
+
+
 class NormalTrainer:
     def __init__(
         self,

@@ -13,6 +13,7 @@ class MethodConfig:
 
 METHOD_CONFIGS: Dict[str, MethodConfig] = {
     "baseline": MethodConfig(name="baseline", use_dp=False, random_batch=False),
+    "StandardSGD": MethodConfig(name="StandardSGD", use_dp=False, random_batch=False),
     "Hamming-Style DP": MethodConfig(
         name="Hamming-Style DP",
         use_dp=True,
