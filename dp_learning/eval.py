@@ -33,7 +33,14 @@ def evaluate_model(model: torch.nn.Module, dataloader: DataLoader, device: str =
 
 def _build_test_loader(dataset_name: str, batch_size: int) -> DataLoader:
     if dataset_name == "emnist":
-        transform = transforms.Compose([transforms.ToTensor()])
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Lambda(lambda x: torch.rot90(x, 1, [1, 2])),
+                transforms.Lambda(lambda x: torch.flip(x, [2])),
+                transforms.Normalize((0.5,), (0.5,)),
+            ]
+        )
         test_data = datasets.EMNIST(
             root="./data",
             split="balanced",

@@ -98,8 +98,8 @@ def run_experiment(
         dataset=config.dataset,
         batch_size=config.batch_size,
         random_batch=random_batch,
-        epsilon=log.bin_epsilon if log.agg_epsilon else None,
-        delta=log.bin_delta if log.agg_delta else None,
+        epsilon=log.bin_epsilon if random_batch else None,
+        delta=log.bin_delta if random_batch else None,
     )
 
     optimizer_kwargs = config.optimizer_kwargs or {}
