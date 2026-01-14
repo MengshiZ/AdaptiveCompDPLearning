@@ -48,6 +48,19 @@ def _build_test_loader(dataset_name: str, batch_size: int) -> DataLoader:
             download=True,
             transform=transform,
         )
+    elif dataset_name == "mnist":
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+            ]
+        )
+        test_data = datasets.MNIST(
+            root="./data",
+            train=False,
+            download=True,
+            transform=transform,
+        )
     elif dataset_name == "cifar10":
         transform = transforms.Compose(
             [

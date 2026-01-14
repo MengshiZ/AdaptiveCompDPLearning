@@ -52,6 +52,22 @@ def _build_vision_dataset(dataset_name: str):
         )
 
         model = SimpleCNN(num_classes=47, in_channels=1)
+    elif dataset_name == "mnist":
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,)),
+            ]
+        )
+
+        train_dataset = datasets.MNIST(
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform,
+        )
+
+        model = SimpleCNN(num_classes=10, in_channels=1)
     elif dataset_name == "cifar10":
         transform = transforms.Compose(
             [
