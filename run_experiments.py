@@ -33,7 +33,7 @@ def run_experiments(
     epochs: int,
     lr: float,
     max_grad_norm: float,
-    dp_mechanism: str,
+    dp_mechanisms: Iterable[str],
     log_every: int | None,
     seeds: Iterable[int],
     output_dir: Path,
@@ -52,32 +52,45 @@ def run_experiments(
                     epochs=epochs,
                     lr=lr,
                     max_grad_norm=max_grad_norm,
-                    dp_mechanism=dp_mechanism,
+                    dp_mechanism="Naive",
                     seed=seed,
                     log_every=log_every,
                 )
                 _, log = run_vision_experiment(config)
                 logs.append(log)
+                _save_run(
+                    output_dir=output_dir,
+                    dataset=dataset_name,
+                    log=log,
+                    params=asdict(config),
+                )
                 continue
 
-            for epsilon in agg_epsilons:
-                config = VisionExperimentConfig(
-                    dataset_name=dataset_name,
-                    method=method,
-                    agg_epsilon=epsilon,
-                    agg_delta=agg_delta,
-                    bin_epsilon=bin_epsilon if method == "Edit-Style DP" else None,
-                    bin_delta=bin_delta if method == "Edit-Style DP" else None,
-                    batch_size=batch_size,
-                    epochs=epochs,
-                    lr=lr,
-                    max_grad_norm=max_grad_norm,
-                    dp_mechanism=dp_mechanism,
-                    seed=seed,
-                    log_every=log_every,
-                )
-                _, log = run_vision_experiment(config)
-                logs.append(log)
+            for dp_mechanism in dp_mechanisms:
+                for epsilon in agg_epsilons:
+                    config = VisionExperimentConfig(
+                        dataset_name=dataset_name,
+                        method=method,
+                        agg_epsilon=epsilon,
+                        agg_delta=agg_delta,
+                        bin_epsilon=bin_epsilon if method == "Edit-Style DP" else None,
+                        bin_delta=bin_delta if method == "Edit-Style DP" else None,
+                        batch_size=batch_size,
+                        epochs=epochs,
+                        lr=lr,
+                        max_grad_norm=max_grad_norm,
+                        dp_mechanism=dp_mechanism,
+                        seed=seed,
+                        log_every=log_every,
+                    )
+                    _, log = run_vision_experiment(config)
+                    logs.append(log)
+                    _save_run(
+                        output_dir=output_dir,
+                        dataset=dataset_name,
+                        log=log,
+                        params=asdict(config),
+                    )
 
     raw_path = output_dir / "raw_logs.json"
     raw_path.write_text(json.dumps([asdict(log) for log in logs], indent=2))
@@ -106,6 +119,38 @@ def run_experiments(
             )
 
 
+def _save_run(
+    output_dir: Path,
+    dataset: str,
+    log,
+    params: dict,
+) -> None:
+    safe_method = log.method.replace(" ", "_")
+    parts = [
+        f"dataset={dataset}",
+        f"method={safe_method}",
+        f"dp_mechanism={log.dp_mechanism}",
+        f"agg_epsilon={log.agg_epsilon}",
+        f"seed={log.seed}",
+    ]
+    run_dir = output_dir / "_".join(str(part) for part in parts)
+    _ensure_dir(run_dir)
+
+    (run_dir / "params.json").write_text(json.dumps(params, indent=2))
+    (run_dir / "log.json").write_text(json.dumps(asdict(log), indent=2))
+    logs_to_df([log]).to_csv(run_dir / "summary.csv", index=False)
+
+    if log.agg_epsilon is not None:
+        plot_learning_curve(
+            logs=[log],
+            dataset=dataset,
+            method=log.method,
+            agg_epsilon=log.agg_epsilon,
+            save_path=run_dir / "learning_curve.png",
+            show=False,
+        )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run DP learning experiments and save raw logs + plots."
@@ -128,7 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
-    parser.add_argument("--dp-mechanism", default="Naive")
+    parser.add_argument(
+        "--dp-mechanisms",
+        default="Naive,DPPreSum",
+        help="Comma-separated list of DP mechanisms to use for DP methods.",
+    )
     parser.add_argument("--log-every", type=int, default=50)
     parser.add_argument("--seeds", default="0", help="Comma-separated list of seeds.")
     parser.add_argument("--output-dir", default="runs")
@@ -141,6 +190,7 @@ def main() -> None:
 
     methods = [method.strip() for method in args.methods.split(",") if method.strip()]
     agg_epsilons = _parse_float_list(args.agg_epsilons)
+    dp_mechanisms = [item.strip() for item in args.dp_mechanisms.split(",") if item.strip()]
     seeds = _parse_int_list(args.seeds)
 
     run_experiments(
@@ -154,7 +204,7 @@ def main() -> None:
         epochs=args.epochs,
         lr=args.lr,
         max_grad_norm=args.max_grad_norm,
-        dp_mechanism=args.dp_mechanism,
+        dp_mechanisms=dp_mechanisms,
         log_every=args.log_every,
         seeds=seeds,
         output_dir=Path(args.output_dir),

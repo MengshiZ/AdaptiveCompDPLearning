@@ -8,6 +8,16 @@ import torch
 from torch.utils.data import DataLoader, Sampler
 
 
+def compute_epsilon_for_range(mean_batch_size: int, delta: float) -> float:
+    if mean_batch_size <= 0:
+        raise ValueError("mean_batch_size must be > 0")
+    if not (0 < delta < 1):
+        raise ValueError("delta must be in (0, 1)")
+
+    u_bound = mean_batch_size / 3
+    return 0.5 * math.log2(1 / delta) / u_bound
+
+
 def sample_truncated_geometric(epsilon: float, delta: float) -> int:
     if epsilon <= 0:
         raise ValueError("epsilon must be > 0")
@@ -31,7 +41,7 @@ class TruncatedGeometricBatchSampler(Sampler[List[int]]):
         self,
         dataset_size: int,
         mean_batch_size: int,
-        epsilon: float,
+        epsilon: float | None,
         delta: float,
         shuffle: bool = True,
     ) -> None:
@@ -39,10 +49,12 @@ class TruncatedGeometricBatchSampler(Sampler[List[int]]):
             raise ValueError("dataset_size must be > 0")
         if mean_batch_size <= 0:
             raise ValueError("mean_batch_size must be > 0")
+        if not (0 < delta < 1):
+            raise ValueError("delta must be in (0, 1)")
 
         self.dataset_size = dataset_size
         self.mean_batch_size = mean_batch_size
-        self.epsilon = epsilon
+        self.epsilon = epsilon or compute_epsilon_for_range(mean_batch_size, delta)
         self.delta = delta
         self.shuffle = shuffle
 
@@ -73,8 +85,8 @@ def make_train_loader(
     delta: float | None = None,
 ) -> DataLoader:
     if random_batch:
-        if epsilon is None or delta is None:
-            raise ValueError("epsilon and delta must be provided for random_batch")
+        if delta is None:
+            raise ValueError("delta must be provided for random_batch")
 
         batch_sampler = TruncatedGeometricBatchSampler(
             dataset_size=len(dataset),
