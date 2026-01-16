@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
@@ -22,6 +23,13 @@ def _ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def _timestamped_output_dir(base_dir: Path) -> Path:
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    run_dir = base_dir / timestamp
+    _ensure_dir(run_dir)
+    return run_dir
+
+
 def run_experiments(
     datasets: Iterable[str],
     methods: Iterable[str],
@@ -38,7 +46,7 @@ def run_experiments(
     seeds: Iterable[int],
     output_dir: Path,
 ) -> None:
-    _ensure_dir(output_dir)
+    run_output_dir = _timestamped_output_dir(output_dir)
 
     logs = []
 
@@ -61,7 +69,7 @@ def run_experiments(
                         _, log = run_vision_experiment(config)
                         logs.append(log)
                         _save_run(
-                            output_dir=output_dir,
+                            output_dir=run_output_dir,
                             dataset=dataset_name,
                             log=log,
                             params=asdict(config),
@@ -88,17 +96,17 @@ def run_experiments(
                             _, log = run_vision_experiment(config)
                             logs.append(log)
                             _save_run(
-                                output_dir=output_dir,
+                                output_dir=run_output_dir,
                                 dataset=dataset_name,
                                 log=log,
                                 params=asdict(config),
                             )
 
-    raw_path = output_dir / "raw_logs.json"
+    raw_path = run_output_dir / "raw_logs.json"
     raw_path.write_text(json.dumps([asdict(log) for log in logs], indent=2))
 
     df = logs_to_df(logs)
-    df.to_csv(output_dir / "summary.csv", index=False)
+    df.to_csv(run_output_dir / "summary.csv", index=False)
 
     for dataset_name in datasets:
         for batch_size in batch_sizes:
@@ -106,7 +114,8 @@ def run_experiments(
                 df,
                 dataset=dataset_name,
                 batch_size=batch_size,
-                save_path=output_dir / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png",
+                save_path=run_output_dir
+                / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png",
                 show=False,
             )
 
@@ -128,7 +137,7 @@ def run_experiments(
                         dataset=dataset_name,
                         method=method,
                         agg_epsilon=epsilon,
-                        save_path=output_dir
+                        save_path=run_output_dir
                         / f"learning_curve_{dataset_name}_bs{batch_size}_{safe_method}_{epsilon}.png",
                         show=False,
                     )
@@ -141,12 +150,19 @@ def _save_run(
     params: dict,
 ) -> None:
     safe_method = log.method.replace(" ", "_")
+    safe_dp_mechanism = str(log.dp_mechanism).replace(" ", "_")
     parts = [
         f"dataset={dataset}",
         f"batch_size={log.batch_size}",
         f"method={safe_method}",
-        f"dp_mechanism={log.dp_mechanism}",
+        f"dp_mechanism={safe_dp_mechanism}",
         f"agg_epsilon={log.agg_epsilon}",
+        f"agg_delta={log.agg_delta}",
+        f"bin_epsilon={log.bin_epsilon}",
+        f"bin_delta={log.bin_delta}",
+        f"max_grad_norm={params.get('max_grad_norm')}",
+        f"epochs={params.get('epochs')}",
+        f"lr={params.get('lr')}",
         f"seed={log.seed}",
     ]
     run_dir = output_dir / "_".join(str(part) for part in parts)
