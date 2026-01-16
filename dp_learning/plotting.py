@@ -20,6 +20,7 @@ def logs_to_df(logs: Iterable[ExperimentLog]) -> pd.DataFrame:
             {
                 "dataset": log.dataset,
                 "method": log.method,
+                "batch_size": log.batch_size,
                 "agg_epsilon": log.agg_epsilon,
                 "agg_delta": log.agg_delta,
                 "seed": log.seed,
@@ -33,15 +34,20 @@ def plot_acc_vs_epsilon(
     df: pd.DataFrame,
     dataset: str,
     epsilon_column: str = "agg_epsilon",
+    batch_size: int | None = None,
     save_path: str | Path | None = None,
     show: bool = True,
 ):
     if epsilon_column not in df.columns:
         raise ValueError(f"Column '{epsilon_column}' not found in dataframe")
 
+    plot_df = df[df["dataset"] == dataset]
+    if batch_size is not None and "batch_size" in plot_df.columns:
+        plot_df = plot_df[plot_df["batch_size"] == batch_size]
+
     plt.figure(figsize=(6, 4))
     sns.lineplot(
-        data=df[df["dataset"] == dataset],
+        data=plot_df,
         x=epsilon_column,
         y="final_acc",
         hue="method",

@@ -27,6 +27,7 @@ METHOD_CONFIGS: Dict[str, MethodConfig] = {
 class ExperimentLog:
     method: str
     dataset: str
+    batch_size: Optional[int] = None
     seed: Optional[int] = None
 
     epochs: List[int] = field(default_factory=list)

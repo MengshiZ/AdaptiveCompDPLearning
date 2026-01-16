@@ -223,6 +223,7 @@ def run_vision_experiment(config: VisionExperimentConfig):
     log = ExperimentLog(
         method=config.method,
         dataset=config.dataset_name,
+        batch_size=config.batch_size,
         seed=config.seed,
         agg_epsilon=config.agg_epsilon,
         agg_delta=config.agg_delta,

@@ -23,13 +23,13 @@ def _ensure_dir(path: Path) -> None:
 
 
 def run_experiments(
-    dataset_name: str,
+    datasets: Iterable[str],
     methods: Iterable[str],
     agg_epsilons: Iterable[float],
     agg_delta: float,
     bin_epsilon: float | None,
     bin_delta: float | None,
-    batch_size: int,
+    batch_sizes: Iterable[int],
     epochs: int,
     lr: float,
     max_grad_norm: float,
@@ -42,55 +42,57 @@ def run_experiments(
 
     logs = []
 
-    for seed in seeds:
-        for method in methods:
-            if method in {"baseline", "StandardSGD"}:
-                config = VisionExperimentConfig(
-                    dataset_name=dataset_name,
-                    method=method,
-                    batch_size=batch_size,
-                    epochs=epochs,
-                    lr=lr,
-                    max_grad_norm=max_grad_norm,
-                    dp_mechanism="Naive",
-                    seed=seed,
-                    log_every=log_every,
-                )
-                _, log = run_vision_experiment(config)
-                logs.append(log)
-                _save_run(
-                    output_dir=output_dir,
-                    dataset=dataset_name,
-                    log=log,
-                    params=asdict(config),
-                )
-                continue
+    for dataset_name in datasets:
+        for batch_size in batch_sizes:
+            for seed in seeds:
+                for method in methods:
+                    if method in {"baseline", "StandardSGD"}:
+                        config = VisionExperimentConfig(
+                            dataset_name=dataset_name,
+                            method=method,
+                            batch_size=batch_size,
+                            epochs=epochs,
+                            lr=lr,
+                            max_grad_norm=max_grad_norm,
+                            dp_mechanism="Naive",
+                            seed=seed,
+                            log_every=log_every,
+                        )
+                        _, log = run_vision_experiment(config)
+                        logs.append(log)
+                        _save_run(
+                            output_dir=output_dir,
+                            dataset=dataset_name,
+                            log=log,
+                            params=asdict(config),
+                        )
+                        continue
 
-            for dp_mechanism in dp_mechanisms:
-                for epsilon in agg_epsilons:
-                    config = VisionExperimentConfig(
-                        dataset_name=dataset_name,
-                        method=method,
-                        agg_epsilon=epsilon,
-                        agg_delta=agg_delta,
-                        bin_epsilon=bin_epsilon if method == "Edit-Style DP" else None,
-                        bin_delta=bin_delta if method == "Edit-Style DP" else None,
-                        batch_size=batch_size,
-                        epochs=epochs,
-                        lr=lr,
-                        max_grad_norm=max_grad_norm,
-                        dp_mechanism=dp_mechanism,
-                        seed=seed,
-                        log_every=log_every,
-                    )
-                    _, log = run_vision_experiment(config)
-                    logs.append(log)
-                    _save_run(
-                        output_dir=output_dir,
-                        dataset=dataset_name,
-                        log=log,
-                        params=asdict(config),
-                    )
+                    for dp_mechanism in dp_mechanisms:
+                        for epsilon in agg_epsilons:
+                            config = VisionExperimentConfig(
+                                dataset_name=dataset_name,
+                                method=method,
+                                agg_epsilon=epsilon,
+                                agg_delta=agg_delta,
+                                bin_epsilon=bin_epsilon if method == "Edit-Style DP" else None,
+                                bin_delta=bin_delta if method == "Edit-Style DP" else None,
+                                batch_size=batch_size,
+                                epochs=epochs,
+                                lr=lr,
+                                max_grad_norm=max_grad_norm,
+                                dp_mechanism=dp_mechanism,
+                                seed=seed,
+                                log_every=log_every,
+                            )
+                            _, log = run_vision_experiment(config)
+                            logs.append(log)
+                            _save_run(
+                                output_dir=output_dir,
+                                dataset=dataset_name,
+                                log=log,
+                                params=asdict(config),
+                            )
 
     raw_path = output_dir / "raw_logs.json"
     raw_path.write_text(json.dumps([asdict(log) for log in logs], indent=2))
@@ -98,25 +100,38 @@ def run_experiments(
     df = logs_to_df(logs)
     df.to_csv(output_dir / "summary.csv", index=False)
 
-    plot_acc_vs_epsilon(
-        df,
-        dataset=dataset_name,
-        save_path=output_dir / "acc_vs_epsilon.png",
-        show=False,
-    )
-
-    dp_methods = [method for method in methods if method not in {"baseline", "StandardSGD"}]
-    for method in dp_methods:
-        for epsilon in agg_epsilons:
-            safe_method = method.replace(" ", "_")
-            plot_learning_curve(
-                logs=logs,
+    for dataset_name in datasets:
+        for batch_size in batch_sizes:
+            plot_acc_vs_epsilon(
+                df,
                 dataset=dataset_name,
-                method=method,
-                agg_epsilon=epsilon,
-                save_path=output_dir / f"learning_curve_{safe_method}_{epsilon}.png",
+                batch_size=batch_size,
+                save_path=output_dir / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png",
                 show=False,
             )
+
+    dp_methods = [method for method in methods if method not in {"baseline", "StandardSGD"}]
+    for dataset_name in datasets:
+        for batch_size in batch_sizes:
+            filtered_logs = [
+                log
+                for log in logs
+                if log.dataset == dataset_name and log.batch_size == batch_size
+            ]
+            if not filtered_logs:
+                continue
+            for method in dp_methods:
+                for epsilon in agg_epsilons:
+                    safe_method = method.replace(" ", "_")
+                    plot_learning_curve(
+                        logs=filtered_logs,
+                        dataset=dataset_name,
+                        method=method,
+                        agg_epsilon=epsilon,
+                        save_path=output_dir
+                        / f"learning_curve_{dataset_name}_bs{batch_size}_{safe_method}_{epsilon}.png",
+                        show=False,
+                    )
 
 
 def _save_run(
@@ -128,6 +143,7 @@ def _save_run(
     safe_method = log.method.replace(" ", "_")
     parts = [
         f"dataset={dataset}",
+        f"batch_size={log.batch_size}",
         f"method={safe_method}",
         f"dp_mechanism={log.dp_mechanism}",
         f"agg_epsilon={log.agg_epsilon}",
@@ -155,7 +171,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run DP learning experiments and save raw logs + plots."
     )
-    parser.add_argument("--dataset", default="emnist", choices=["emnist", "mnist", "cifar10"])
+    parser.add_argument(
+        "--datasets",
+        default="emnist",
+        help="Comma-separated datasets to run (emnist,mnist,cifar10).",
+    )
     parser.add_argument(
         "--methods",
         default="baseline,StandardSGD,Hamming-Style DP,Edit-Style DP",
@@ -169,7 +189,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--agg-delta", type=float, default=1e-5)
     parser.add_argument("--bin-epsilon", type=float, default=0.5)
     parser.add_argument("--bin-delta", type=float, default=1e-5)
-    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument(
+        "--batch-sizes",
+        default="256",
+        help="Comma-separated list of batch sizes.",
+    )
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
@@ -188,19 +212,21 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    datasets = [item.strip() for item in args.datasets.split(",") if item.strip()]
     methods = [method.strip() for method in args.methods.split(",") if method.strip()]
     agg_epsilons = _parse_float_list(args.agg_epsilons)
     dp_mechanisms = [item.strip() for item in args.dp_mechanisms.split(",") if item.strip()]
+    batch_sizes = _parse_int_list(args.batch_sizes)
     seeds = _parse_int_list(args.seeds)
 
     run_experiments(
-        dataset_name=args.dataset,
+        datasets=datasets,
         methods=methods,
         agg_epsilons=agg_epsilons,
         agg_delta=args.agg_delta,
         bin_epsilon=args.bin_epsilon,
         bin_delta=args.bin_delta,
-        batch_size=args.batch_size,
+        batch_sizes=batch_sizes,
         epochs=args.epochs,
         lr=args.lr,
         max_grad_norm=args.max_grad_norm,
