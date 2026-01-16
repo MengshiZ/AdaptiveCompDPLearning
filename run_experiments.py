@@ -79,6 +79,7 @@ def run_experiments(
                             seed=seed,
                             log_every=log_every,
                         )
+                        _print_run_config(config)
                         _, log = run_vision_experiment(config)
                         logs.append(log)
                         _save_run(
@@ -106,6 +107,7 @@ def run_experiments(
                                 seed=seed,
                                 log_every=log_every,
                             )
+                            _print_run_config(config)
                             _, log = run_vision_experiment(config)
                             logs.append(log)
                             _save_run(
@@ -317,6 +319,24 @@ def _save_run(
             save_path=run_dir / "learning_curve.png",
             show=False,
         )
+
+
+def _print_run_config(config: VisionExperimentConfig) -> None:
+    parts = [
+        f"dataset={config.dataset_name}",
+        f"method={config.method}",
+        f"batch_size={config.batch_size}",
+        f"epochs={config.epochs}",
+        f"lr={config.lr}",
+        f"max_grad_norm={config.max_grad_norm}",
+        f"agg_epsilon={config.agg_epsilon}",
+        f"agg_delta={config.agg_delta}",
+        f"bin_epsilon={config.bin_epsilon}",
+        f"bin_delta={config.bin_delta}",
+        f"dp_mechanism={config.dp_mechanism}",
+        f"seed={config.seed}",
+    ]
+    print("Running config: " + ", ".join(parts))
 
 
 def build_parser() -> argparse.ArgumentParser:
