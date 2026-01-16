@@ -7,8 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 from dp_learning.experiment import VisionExperimentConfig, run_vision_experiment
 from dp_learning.plotting import logs_to_df, plot_acc_vs_epsilon, plot_learning_curve
+from dp_learning.configs import ExperimentLog
 
 
 def _parse_float_list(value: str) -> List[float]:
@@ -28,6 +32,15 @@ def _timestamped_output_dir(base_dir: Path) -> Path:
     run_dir = base_dir / timestamp
     _ensure_dir(run_dir)
     return run_dir
+
+
+def _find_latest_timestamp_dir(base_dir: Path) -> Path:
+    if not base_dir.exists():
+        raise FileNotFoundError(f"Output directory not found: {base_dir}")
+    candidates = sorted([path for path in base_dir.iterdir() if path.is_dir()])
+    if not candidates:
+        raise FileNotFoundError(f"No timestamped runs found in {base_dir}")
+    return candidates[-1]
 
 
 def run_experiments(
@@ -143,6 +156,129 @@ def run_experiments(
                     )
 
 
+def visualize_results(
+    output_dir: Path,
+    timestamp: str | None = None,
+) -> Path:
+    run_dir = output_dir / timestamp if timestamp else _find_latest_timestamp_dir(output_dir)
+
+    raw_logs_path = run_dir / "raw_logs.json"
+    if not raw_logs_path.exists():
+        raise FileNotFoundError(f"Missing raw logs: {raw_logs_path}")
+
+    raw_logs = json.loads(raw_logs_path.read_text())
+    logs = [ExperimentLog(**log) for log in raw_logs]
+
+    if not logs:
+        raise ValueError("No logs found to visualize.")
+
+    df = logs_to_df(logs)
+
+    datasets = sorted({log.dataset for log in logs})
+    batch_sizes = sorted({log.batch_size for log in logs if log.batch_size is not None})
+    methods = sorted({log.method for log in logs})
+    dp_methods = [method for method in methods if method not in {"baseline", "StandardSGD"}]
+    baseline_methods = [method for method in methods if method in {"baseline", "StandardSGD"}]
+
+    for dataset_name in datasets:
+        for batch_size in batch_sizes:
+            plot_df = df[
+                (df["dataset"] == dataset_name) & (df["batch_size"] == batch_size)
+            ]
+            if not plot_df.empty:
+                plt.figure(figsize=(6, 4))
+                dp_df = plot_df[plot_df["agg_epsilon"].notna()]
+                if not dp_df.empty:
+                    sns.lineplot(
+                        data=dp_df,
+                        x="agg_epsilon",
+                        y="final_acc",
+                        hue="method",
+                        marker="o",
+                        errorbar="sd",
+                    )
+                    plt.xscale("log")
+
+                baseline_df = plot_df[plot_df["method"].isin(baseline_methods)]
+                for method in baseline_methods:
+                    method_df = baseline_df[baseline_df["method"] == method]
+                    if method_df.empty:
+                        continue
+                    value = method_df["final_acc"].mean()
+                    plt.axhline(value, label=f"{method} (baseline)", linestyle="--")
+
+                plt.xlabel("Privacy budget ε")
+                plt.ylabel("Test accuracy")
+                plt.title(f"{dataset_name}: Accuracy vs Privacy Budget (bs={batch_size})")
+                plt.legend()
+                plt.tight_layout()
+                plt.savefig(
+                    run_dir / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png"
+                )
+                plt.close()
+
+            filtered_logs = [
+                log
+                for log in logs
+                if log.dataset == dataset_name and log.batch_size == batch_size
+            ]
+            if not filtered_logs:
+                continue
+
+            for method in dp_methods:
+                epsilons = sorted(
+                    {
+                        log.agg_epsilon
+                        for log in filtered_logs
+                        if log.method == method and log.agg_epsilon is not None
+                    }
+                )
+                for epsilon in epsilons:
+                    safe_method = method.replace(" ", "_")
+                    plot_learning_curve(
+                        logs=filtered_logs,
+                        dataset=dataset_name,
+                        method=method,
+                        agg_epsilon=epsilon,
+                        save_path=run_dir
+                        / f"learning_curve_{dataset_name}_bs{batch_size}_{safe_method}_{epsilon}.png",
+                        show=False,
+                    )
+
+            if baseline_methods:
+                for method in baseline_methods:
+                    method_logs = [
+                        log for log in filtered_logs if log.method == method
+                    ]
+                    if not method_logs:
+                        continue
+                    epochs = method_logs[0].epochs
+                    finals = [log.test_acc[-1] for log in method_logs if log.test_acc]
+                    if not finals or not epochs:
+                        continue
+                    baseline_value = float(np.mean(finals))
+                    plt.figure(figsize=(6, 4))
+                    plt.plot(
+                        epochs,
+                        [baseline_value] * len(epochs),
+                        label=f"{method} (baseline)",
+                    )
+                    plt.xlabel("Epoch")
+                    plt.ylabel("Test accuracy")
+                    plt.title(
+                        f"{dataset_name} Baseline Accuracy Curve (bs={batch_size})"
+                    )
+                    plt.legend()
+                    plt.tight_layout()
+                    plt.savefig(
+                        run_dir
+                        / f"learning_curve_{dataset_name}_bs{batch_size}_{method}_baseline.png"
+                    )
+                    plt.close()
+
+    return run_dir
+
+
 def _save_run(
     output_dir: Path,
     dataset: str,
@@ -188,6 +324,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run DP learning experiments and save raw logs + plots."
     )
     parser.add_argument(
+        "--visualize",
+        action="store_true",
+        help="Only visualize results from an existing run.",
+    )
+    parser.add_argument(
+        "--timestamp",
+        default=None,
+        help="Timestamp folder to visualize (defaults to latest).",
+    )
+    parser.add_argument(
         "--datasets",
         default="emnist",
         help="Comma-separated datasets to run (emnist,mnist,cifar10).",
@@ -228,6 +374,11 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    output_dir = Path(args.output_dir)
+    if args.visualize:
+        visualize_results(output_dir=output_dir, timestamp=args.timestamp)
+        return
+
     datasets = [item.strip() for item in args.datasets.split(",") if item.strip()]
     methods = [method.strip() for method in args.methods.split(",") if method.strip()]
     agg_epsilons = _parse_float_list(args.agg_epsilons)
@@ -249,7 +400,7 @@ def main() -> None:
         dp_mechanisms=dp_mechanisms,
         log_every=args.log_every,
         seeds=seeds,
-        output_dir=Path(args.output_dir),
+        output_dir=output_dir,
     )
 
 
