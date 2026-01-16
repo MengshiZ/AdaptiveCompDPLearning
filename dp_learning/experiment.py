@@ -161,6 +161,10 @@ def run_experiment(
 
     model.to(config.device)
 
+    best_acc = -float("inf")
+    best_epoch = None
+    best_state = None
+
     for epoch in range(1, config.epochs + 1):
         model.train()
 
@@ -196,7 +200,17 @@ def run_experiment(
         log.test_loss.append(test_loss)
         log.test_acc.append(acc)
 
+        if acc > best_acc:
+            best_acc = acc
+            best_epoch = epoch
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+
         print(f"Epoch {epoch}/{config.epochs} | Train loss: {avg_loss:.4f}")
+
+    if best_state is not None:
+        model.load_state_dict(best_state)
+        log.best_epoch = best_epoch
+        log.best_acc = best_acc
 
     return model, log
 

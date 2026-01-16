@@ -34,6 +34,8 @@ class ExperimentLog:
     train_loss: List[float] = field(default_factory=list)
     test_loss: List[float] = field(default_factory=list)
     test_acc: List[float] = field(default_factory=list)
+    best_epoch: Optional[int] = None
+    best_acc: Optional[float] = None
 
     agg_epsilon: Optional[float] = None
     agg_delta: Optional[float] = None
