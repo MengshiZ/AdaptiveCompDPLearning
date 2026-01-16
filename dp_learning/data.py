@@ -41,7 +41,6 @@ class TruncatedGeometricBatchSampler(Sampler[List[int]]):
         self,
         dataset_size: int,
         mean_batch_size: int,
-        epsilon: float | None,
         delta: float,
         shuffle: bool = True,
     ) -> None:
@@ -54,7 +53,7 @@ class TruncatedGeometricBatchSampler(Sampler[List[int]]):
 
         self.dataset_size = dataset_size
         self.mean_batch_size = mean_batch_size
-        self.epsilon = epsilon or compute_epsilon_for_range(mean_batch_size, delta)
+        self.epsilon = compute_epsilon_for_range(mean_batch_size, delta)
         self.delta = delta
         self.shuffle = shuffle
 
@@ -81,7 +80,6 @@ def make_train_loader(
     batch_size: int,
     shuffle: bool = True,
     random_batch: bool = False,
-    epsilon: float | None = None,
     delta: float | None = None,
 ) -> DataLoader:
     if random_batch:
@@ -91,7 +89,6 @@ def make_train_loader(
         batch_sampler = TruncatedGeometricBatchSampler(
             dataset_size=len(dataset),
             mean_batch_size=batch_size,
-            epsilon=epsilon,
             delta=delta,
             shuffle=shuffle,
         )
