@@ -335,7 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--datasets",
-        default="emnist",
+        default="emnist,mnist,cifar10",
         help="Comma-separated datasets to run (emnist,mnist,cifar10).",
     )
     parser.add_argument(
@@ -345,7 +345,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--agg-epsilons",
-        default="0.5,1.0,2.0,4.0",
+        default="0.5,1.0,2.0,4.0,8.0",
         help="Comma-separated agg epsilons for DP runs.",
     )
     parser.add_argument("--agg-delta", type=float, default=1e-5)
@@ -353,7 +353,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bin-delta", type=float, default=1e-5)
     parser.add_argument(
         "--batch-sizes",
-        default="256",
+        default="128,256,512",
         help="Comma-separated list of batch sizes.",
     )
     parser.add_argument("--epochs", type=int, default=10)
@@ -365,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Comma-separated list of DP mechanisms to use for DP methods.",
     )
     parser.add_argument("--log-every", type=int, default=50)
-    parser.add_argument("--seeds", default="0", help="Comma-separated list of seeds.")
+    parser.add_argument("--seeds", default="0,1,2", help="Comma-separated list of seeds.")
     parser.add_argument("--output-dir", default="runs")
     return parser
 
