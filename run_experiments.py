@@ -373,10 +373,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bin-delta", type=float, default=1e-5)
     parser.add_argument(
         "--batch-sizes",
-        default="128,256,512",
+        default="256,512",
         help="Comma-separated list of batch sizes.",
     )
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--lr", type=float, default=0.1)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument(
@@ -384,8 +384,8 @@ def build_parser() -> argparse.ArgumentParser:
         default="Naive,DPPreSum",
         help="Comma-separated list of DP mechanisms to use for DP methods.",
     )
-    parser.add_argument("--log-every", type=int, default=50)
-    parser.add_argument("--seeds", default="0,1,2", help="Comma-separated list of seeds.")
+    parser.add_argument("--log-every", type=int, default=200)
+    parser.add_argument("--seeds", default="42", help="Comma-separated list of seeds.")
     parser.add_argument("--output-dir", default="runs")
     return parser
 

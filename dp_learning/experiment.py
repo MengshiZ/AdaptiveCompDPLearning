@@ -138,10 +138,10 @@ def run_experiment(
             max_grad_norm=config.max_grad_norm,
             dp_mechanism=log.dp_mechanism,
         )
-        print(
-            f"Running {log.method} | "
-            f"random_batch={random_batch}, agg_epsilon={log.agg_epsilon}, agg_delta={log.agg_delta}"
-        )
+        # print(
+        #     f"Running {log.method} | "
+        #     f"random_batch={random_batch}, agg_epsilon={log.agg_epsilon}, agg_delta={log.agg_delta}"
+        # )
     else:
         if log.method == "StandardSGD":
             trainer = StandardSGD(
@@ -149,7 +149,7 @@ def run_experiment(
                 optimizer=optimizer,
                 device=config.device,
             )
-            print("Running StandardSGD (non-DP)")
+            # print("Running StandardSGD (non-DP)")
         else:
             trainer = NormalTrainer(
                 model=model,
@@ -157,7 +157,7 @@ def run_experiment(
                 device=config.device,
                 max_grad_norm=config.max_grad_norm,
             )
-            print("Running baseline (non-DP)")
+            # print("Running baseline (non-DP)")
 
     model.to(config.device)
 

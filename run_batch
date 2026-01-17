@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# Tell the system the resources you need. Adjust the numbers according to your need
+# specify the partition to use and GPUs needed with -p and --gres optons, e.g.
+# '--gres=gpu:4' for four RTX4090 GPUs
+# '-p q-hgpu-batch --gres=gpu:2' for to H100 or H800 GPUs
+# '-p q-hgpu-batch --gres=gpu:h100:2 for two H100 GPUs
+# '-p q-hgpu-batch --gres=gpu:h800:4 for four H800 GPUs
+#SBATCH --nodes=1 --gres=gpu:1 --mail-type=ALL
+
+
+# Specify a time limit if needed, e.g., 4 days
+SBATCH -t 10-00:00:00
+
+#If you use Anaconda, initialize it
+. $HOME/anaconda3/etc/profile.d/conda.sh
+conda activate ICML2026dp
+
+# cd your your desired directory and execute your program, e.g.
+cd /userhome/cs3/zmsxsl/AdaptiveCompDPLearning
+python run_experiments.py

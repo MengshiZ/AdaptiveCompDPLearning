@@ -15,7 +15,7 @@ def compute_epsilon_for_range(mean_batch_size: int, delta: float) -> float:
         raise ValueError("delta must be in (0, 1)")
 
     u_bound = mean_batch_size / 3
-    return 0.5 * math.log2(1 / delta) / u_bound
+    return math.log(2 / delta) / u_bound
 
 
 def sample_truncated_geometric(epsilon: float, delta: float) -> int:
@@ -25,7 +25,7 @@ def sample_truncated_geometric(epsilon: float, delta: float) -> int:
         raise ValueError("delta must be in (0, 1)")
 
     alpha = math.exp(epsilon)
-    u_bound = 0.5 * math.log2(1 / delta) / epsilon
+    u_bound = math.log(2 / delta) / epsilon
 
     p = 1 - 1 / alpha
     magnitude = torch.distributions.Geometric(p).sample().item()

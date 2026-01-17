@@ -86,7 +86,7 @@ class DPPreSumQuery:
             if key not in self.tail_tree_noise[base]:
                 self.tail_tree_noise[base][key] = self.rng.normal(
                     0.0,
-                    self.sigma * math.sqrt(math.log(self.current_base)),
+                    self.sigma * (math.log(self.current_base)),
                     size=self.dim,
                 )
 
