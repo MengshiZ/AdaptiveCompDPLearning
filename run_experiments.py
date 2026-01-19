@@ -7,11 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List
 
-import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
 from dp_learning.experiment import VisionExperimentConfig, run_vision_experiment
-from dp_learning.plotting import logs_to_df, plot_acc_vs_epsilon, plot_learning_curve
+from dp_learning.plotting import logs_to_df, plot_accuracy_summary
 from dp_learning.configs import ExperimentLog
 
 
@@ -122,161 +119,41 @@ def run_experiments(
 
     df = logs_to_df(logs)
     df.to_csv(run_output_dir / "summary.csv", index=False)
-
-    for dataset_name in datasets:
-        for batch_size in batch_sizes:
-            plot_acc_vs_epsilon(
-                df,
-                dataset=dataset_name,
-                batch_size=batch_size,
-                save_path=run_output_dir
-                / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png",
-                show=False,
-            )
-
-    dp_methods = [method for method in methods if method not in {"baseline", "StandardSGD"}]
-    for dataset_name in datasets:
-        for batch_size in batch_sizes:
-            filtered_logs = [
-                log
-                for log in logs
-                if log.dataset == dataset_name and log.batch_size == batch_size
-            ]
-            if not filtered_logs:
-                continue
-            for method in dp_methods:
-                for epsilon in agg_epsilons:
-                    safe_method = method.replace(" ", "_")
-                    plot_learning_curve(
-                        logs=filtered_logs,
-                        dataset=dataset_name,
-                        method=method,
-                        agg_epsilon=epsilon,
-                        save_path=run_output_dir
-                        / f"learning_curve_{dataset_name}_bs{batch_size}_{safe_method}_{epsilon}.png",
-                        show=False,
-                    )
+    return run_output_dir
 
 
-def visualize_results(
+def plot_results(
     output_dir: Path,
+    dataset: str,
     timestamp: str | None = None,
+    show: bool = True,
 ) -> Path:
     run_dir = output_dir / timestamp if timestamp else _find_latest_timestamp_dir(output_dir)
-
+    logs: list[ExperimentLog] = []
     raw_logs_path = run_dir / "raw_logs.json"
-    if not raw_logs_path.exists():
-        raise FileNotFoundError(f"Missing raw logs: {raw_logs_path}")
-
-    raw_logs = json.loads(raw_logs_path.read_text())
-    logs = [ExperimentLog(**log) for log in raw_logs]
-
-    if not logs:
-        raise ValueError("No logs found to visualize.")
-
-    df = logs_to_df(logs)
-
-    datasets = sorted({log.dataset for log in logs})
-    batch_sizes = sorted({log.batch_size for log in logs if log.batch_size is not None})
-    methods = sorted({log.method for log in logs})
-    dp_methods = [method for method in methods if method not in {"baseline", "StandardSGD"}]
-    baseline_methods = [method for method in methods if method in {"baseline", "StandardSGD"}]
-
-    for dataset_name in datasets:
-        for batch_size in batch_sizes:
-            plot_df = df[
-                (df["dataset"] == dataset_name) & (df["batch_size"] == batch_size)
-            ]
-            if not plot_df.empty:
-                plt.figure(figsize=(6, 4))
-                dp_df = plot_df[plot_df["agg_epsilon"].notna()]
-                if not dp_df.empty:
-                    sns.lineplot(
-                        data=dp_df,
-                        x="agg_epsilon",
-                        y="final_acc",
-                        hue="method",
-                        marker="o",
-                        errorbar="sd",
-                    )
-                    plt.xscale("log")
-
-                baseline_df = plot_df[plot_df["method"].isin(baseline_methods)]
-                for method in baseline_methods:
-                    method_df = baseline_df[baseline_df["method"] == method]
-                    if method_df.empty:
-                        continue
-                    value = method_df["final_acc"].mean()
-                    plt.axhline(value, label=f"{method} (baseline)", linestyle="--")
-
-                plt.xlabel("Privacy budget ε")
-                plt.ylabel("Test accuracy")
-                plt.title(f"{dataset_name}: Accuracy vs Privacy Budget (bs={batch_size})")
-                plt.legend()
-                plt.tight_layout()
-                plt.savefig(
-                    run_dir / f"acc_vs_epsilon_{dataset_name}_bs{batch_size}.png"
-                )
-                plt.close()
-
-            filtered_logs = [
-                log
-                for log in logs
-                if log.dataset == dataset_name and log.batch_size == batch_size
-            ]
-            if not filtered_logs:
+    if raw_logs_path.exists():
+        raw_logs = json.loads(raw_logs_path.read_text())
+        logs = [ExperimentLog(**log) for log in raw_logs]
+    else:
+        for log_path in sorted(run_dir.rglob("log.json")):
+            try:
+                log_data = json.loads(log_path.read_text())
+            except json.JSONDecodeError:
+                print(f"Skipping invalid log file: {log_path}")
+                continue
+            try:
+                logs.append(ExperimentLog(**log_data))
+            except TypeError:
+                print(f"Skipping incompatible log file: {log_path}")
                 continue
 
-            for method in dp_methods:
-                epsilons = sorted(
-                    {
-                        log.agg_epsilon
-                        for log in filtered_logs
-                        if log.method == method and log.agg_epsilon is not None
-                    }
-                )
-                for epsilon in epsilons:
-                    safe_method = method.replace(" ", "_")
-                    plot_learning_curve(
-                        logs=filtered_logs,
-                        dataset=dataset_name,
-                        method=method,
-                        agg_epsilon=epsilon,
-                        save_path=run_dir
-                        / f"learning_curve_{dataset_name}_bs{batch_size}_{safe_method}_{epsilon}.png",
-                        show=False,
-                    )
+    if not logs:
+        raise FileNotFoundError(
+            f"No logs found to visualize in {run_dir}. Expected raw_logs.json or log.json files."
+        )
 
-            if baseline_methods:
-                for method in baseline_methods:
-                    method_logs = [
-                        log for log in filtered_logs if log.method == method
-                    ]
-                    if not method_logs:
-                        continue
-                    epochs = method_logs[0].epochs
-                    finals = [log.test_acc[-1] for log in method_logs if log.test_acc]
-                    if not finals or not epochs:
-                        continue
-                    baseline_value = float(np.mean(finals))
-                    plt.figure(figsize=(6, 4))
-                    plt.plot(
-                        epochs,
-                        [baseline_value] * len(epochs),
-                        label=f"{method} (baseline)",
-                    )
-                    plt.xlabel("Epoch")
-                    plt.ylabel("Test accuracy")
-                    plt.title(
-                        f"{dataset_name} Baseline Accuracy Curve (bs={batch_size})"
-                    )
-                    plt.legend()
-                    plt.tight_layout()
-                    plt.savefig(
-                        run_dir
-                        / f"learning_curve_{dataset_name}_bs{batch_size}_{method}_baseline.png"
-                    )
-                    plt.close()
+    save_path = run_dir / f"acc_summary_{dataset}.png"
+    plot_accuracy_summary(logs, dataset=dataset, save_path=save_path, show=show)
 
     return run_dir
 
@@ -310,16 +187,6 @@ def _save_run(
     (run_dir / "log.json").write_text(json.dumps(asdict(log), indent=2))
     logs_to_df([log]).to_csv(run_dir / "summary.csv", index=False)
 
-    if log.agg_epsilon is not None:
-        plot_learning_curve(
-            logs=[log],
-            dataset=dataset,
-            method=log.method,
-            agg_epsilon=log.agg_epsilon,
-            save_path=run_dir / "learning_curve.png",
-            show=False,
-        )
-
 
 def _print_run_config(config: VisionExperimentConfig) -> None:
     parts = [
@@ -341,12 +208,17 @@ def _print_run_config(config: VisionExperimentConfig) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run DP learning experiments and save raw logs + plots."
+        description="Run DP learning experiments and save raw logs."
     )
     parser.add_argument(
         "--visualize",
         action="store_true",
         help="Only visualize results from an existing run.",
+    )
+    parser.add_argument(
+        "--plot-dataset",
+        default="emnist",
+        help="Dataset to plot when using --visualize.",
     )
     parser.add_argument(
         "--timestamp",
@@ -396,7 +268,11 @@ def main() -> None:
 
     output_dir = Path(args.output_dir)
     if args.visualize:
-        visualize_results(output_dir=output_dir, timestamp=args.timestamp)
+        plot_results(
+            output_dir=output_dir,
+            dataset=args.plot_dataset,
+            timestamp=args.timestamp,
+        )
         return
 
     datasets = [item.strip() for item in args.datasets.split(",") if item.strip()]
