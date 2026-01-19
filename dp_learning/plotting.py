@@ -23,6 +23,7 @@ def logs_to_df(logs: Iterable[ExperimentLog]) -> pd.DataFrame:
                 "batch_size": log.batch_size,
                 "agg_epsilon": log.agg_epsilon,
                 "agg_delta": log.agg_delta,
+                "dp_mechanism": log.dp_mechanism,
                 "seed": log.seed,
                 "final_acc": log.test_acc[-1],
             }
@@ -92,7 +93,6 @@ def plot_learning_curve(
 
     plt.figure(figsize=(6, 4))
     plt.plot(epochs, mean, label=method)
-    plt.fill_between(epochs, mean - std, mean + std, alpha=0.3)
     plt.xlabel("Epoch")
     plt.ylabel("Test accuracy")
     plt.title(f"{dataset} Learning Curve (ε={agg_epsilon})")
@@ -109,7 +109,7 @@ def plot_learning_curve(
 def plot_accuracy_summary(
     logs: Iterable[ExperimentLog],
     dataset: str,
-    save_path: str | Path | None = None,
+    output_dir: str | Path | None = None,
     show: bool = True,
 ):
     df = logs_to_df(logs)
@@ -118,41 +118,57 @@ def plot_accuracy_summary(
         print(f"No results available for dataset '{dataset}'.")
         return None
 
-    plt.figure(figsize=(7, 4))
+    plot_dir = Path(output_dir) if output_dir is not None else None
+    if plot_dir is not None:
+        plot_dir.mkdir(parents=True, exist_ok=True)
 
-    dp_df = plot_df[plot_df["agg_epsilon"].notna()]
-    if not dp_df.empty:
-        sns.lineplot(
-            data=dp_df,
-            x="agg_epsilon",
-            y="final_acc",
-            hue="method",
-            style="batch_size",
-            markers=True,
-            dashes=False,
-            errorbar="sd",
-        )
-        plt.xscale("log")
+    batch_sizes = sorted(plot_df["batch_size"].dropna().unique())
+    if not batch_sizes:
+        print(f"No batch sizes available for dataset '{dataset}'.")
+        return None
 
-    baseline_df = plot_df[plot_df["agg_epsilon"].isna()]
-    if not baseline_df.empty:
-        grouped = baseline_df.groupby(["method", "batch_size"], dropna=False)["final_acc"]
-        for (method, batch_size), values in grouped:
-            label = f"{method}"
-            if pd.notna(batch_size):
-                label = f"{label} (bs={int(batch_size)})"
-            plt.axhline(values.mean(), linestyle="--", alpha=0.7, label=label)
+    axes = []
+    for batch_size in batch_sizes:
+        batch_df = plot_df[plot_df["batch_size"] == batch_size]
+        if batch_df.empty:
+            continue
 
-    plt.xlabel("Privacy budget ε")
-    plt.ylabel("Test accuracy")
-    plt.title(f"{dataset}: Accuracy vs Privacy Budget")
-    plt.tight_layout()
+        plt.figure(figsize=(7, 4))
 
-    if save_path is not None:
-        plt.savefig(save_path)
-    if show:
-        plt.show()
-    else:
-        plt.close()
+        dp_df = batch_df[batch_df["agg_epsilon"].notna()]
+        if not dp_df.empty:
+            sns.lineplot(
+                data=dp_df,
+                x="agg_epsilon",
+                y="final_acc",
+                hue="method",
+                style="dp_mechanism",
+                markers=True,
+                dashes=False,
+                errorbar="sd",
+            )
+            plt.xscale("log")
 
-    return plt.gca()
+        baseline_df = batch_df[batch_df["agg_epsilon"].isna()]
+        if not baseline_df.empty:
+            grouped = baseline_df.groupby(["method"], dropna=False)["final_acc"]
+            for method, values in grouped:
+                label = f"{method} (baseline)"
+                plt.axhline(values.mean(), linestyle="--", alpha=0.7, label=label)
+
+        plt.xlabel("Privacy budget ε")
+        plt.ylabel("Test accuracy")
+        plt.title(f"{dataset}: Accuracy vs Privacy Budget (bs={int(batch_size)})")
+        plt.tight_layout()
+
+        if plot_dir is not None:
+            filename = f"acc_summary_{dataset}_bs{int(batch_size)}.png"
+            plt.savefig(plot_dir / filename)
+        if show:
+            plt.show()
+        else:
+            plt.close()
+
+        axes.append(plt.gca())
+
+    return axes

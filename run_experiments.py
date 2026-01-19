@@ -152,8 +152,8 @@ def plot_results(
             f"No logs found to visualize in {run_dir}. Expected raw_logs.json or log.json files."
         )
 
-    save_path = run_dir / f"acc_summary_{dataset}.png"
-    plot_accuracy_summary(logs, dataset=dataset, save_path=save_path, show=show)
+    plot_dir = run_dir / "plots"
+    plot_accuracy_summary(logs, dataset=dataset, output_dir=plot_dir, show=show)
 
     return run_dir
 
