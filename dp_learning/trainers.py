@@ -118,6 +118,7 @@ class DPSGDTrainer:
 
         self.mechanism = self._new_mechanism()
         self.step = 0
+        self.base_params = self._snapshot_params()
 
     def _new_mechanism(self):
         if self.dp_mechanism == "DPPreSum":
@@ -139,6 +140,10 @@ class DPSGDTrainer:
         self.step = 0
         gc.collect()
         self.mechanism = self._new_mechanism()
+        self.base_params = self._snapshot_params()
+
+    def _snapshot_params(self) -> list[torch.Tensor]:
+        return [p.detach().clone() for p in self.model.parameters()]
 
     def train_batch(self, x: torch.Tensor, y: torch.Tensor, loss_fn) -> float:
         self.model.train()
@@ -182,7 +187,10 @@ class DPSGDTrainer:
 
         summed_grad_np = summed_grad.detach().cpu().numpy()
         self.mechanism.update(summed_grad_np)
-        noisy_sum = self.mechanism.single_query()
+        if self.dp_mechanism == "DPPreSum":
+            noisy_sum = self.mechanism.query()
+        else:
+            noisy_sum = self.mechanism.single_query()
 
         self.step += 1
 
@@ -193,23 +201,32 @@ class DPSGDTrainer:
             dtype=summed_grad.dtype,
         )
 
-        self.optimizer.zero_grad()
+        if self.dp_mechanism == "DPPreSum":
+            lr = self.optimizer.param_groups[0]["lr"]
+            current_idx = 0
+            for param, base in zip(self.model.parameters(), self.base_params, strict=True):
+                numel = param.numel()
+                grad_slice = noisy_avg_grad[current_idx : current_idx + numel].reshape_as(param)
+                param.data.copy_(base - lr * grad_slice)
+                current_idx += numel
+        else:
+            self.optimizer.zero_grad()
 
-        current_idx = 0
-        for name in param_names:
-            param = params_dict[name]
-            numel = param.numel()
+            current_idx = 0
+            for name in param_names:
+                param = params_dict[name]
+                numel = param.numel()
 
-            grad_slice = noisy_avg_grad[current_idx : current_idx + numel]
+                grad_slice = noisy_avg_grad[current_idx : current_idx + numel]
 
-            if param.grad is None:
-                param.grad = grad_slice.reshape(param.shape).detach().clone()
-            else:
-                param.grad.copy_(grad_slice.reshape(param.shape))
+                if param.grad is None:
+                    param.grad = grad_slice.reshape(param.shape).detach().clone()
+                else:
+                    param.grad.copy_(grad_slice.reshape(param.shape))
 
-            current_idx += numel
+                current_idx += numel
 
-        self.optimizer.step()
+            self.optimizer.step()
 
         with torch.no_grad():
             loss = loss_fn(self.model(x), y)
