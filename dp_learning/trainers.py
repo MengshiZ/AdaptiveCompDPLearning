@@ -116,6 +116,7 @@ class DPSGDTrainer:
 
         self.mechanism = self._new_mechanism()
         self.step = 0
+        self._snapshot_initial_params()
 
     def _new_mechanism(self):
         if self.dp_mechanism == "DPPreSum":
@@ -137,6 +138,39 @@ class DPSGDTrainer:
         self.step = 0
         gc.collect()
         self.mechanism = self._new_mechanism()
+        self._snapshot_initial_params()
+
+    def _snapshot_initial_params(self) -> None:
+        self.initial_params = {
+            name: param.detach().clone() for name, param in self.model.named_parameters()
+        }
+
+    def _param_lrs(self) -> dict[torch.nn.Parameter, float]:
+        return {
+            param: group["lr"]
+            for group in self.optimizer.param_groups
+            for param in group["params"]
+        }
+
+    def _apply_presum_update(
+        self,
+        noisy_avg_grad: torch.Tensor,
+        param_names: list[str],
+        params_dict: dict[str, torch.nn.Parameter],
+    ) -> None:
+        param_lrs = self._param_lrs()
+        self.optimizer.zero_grad(set_to_none=True)
+
+        current_idx = 0
+        for name in param_names:
+            param = params_dict[name]
+            numel = param.numel()
+            grad_slice = noisy_avg_grad[current_idx : current_idx + numel]
+            lr = param_lrs.get(param, self.optimizer.param_groups[0]["lr"])
+            base_param = self.initial_params[name].to(param.device)
+            updated = base_param - lr * grad_slice.reshape_as(param)
+            param.data.copy_(updated)
+            current_idx += numel
 
     def train_batch(self, x: torch.Tensor, y: torch.Tensor, loss_fn) -> float:
         self.model.train()
@@ -180,7 +214,10 @@ class DPSGDTrainer:
 
         summed_grad_np = summed_grad.detach().cpu().numpy()
         self.mechanism.update(summed_grad_np)
-        noisy_sum = self.mechanism.single_query()
+        if self.dp_mechanism == "DPPreSum":
+            noisy_sum = self.mechanism.query()
+        else:
+            noisy_sum = self.mechanism.single_query()
 
         self.step += 1
 
@@ -190,23 +227,25 @@ class DPSGDTrainer:
             dtype=summed_grad.dtype,
         )
 
-        self.optimizer.zero_grad()
+        if self.dp_mechanism == "DPPreSum":
+            self._apply_presum_update(noisy_avg_grad, param_names, params_dict)
+        else:
+            self.optimizer.zero_grad(set_to_none=True)
+            current_idx = 0
+            for name in param_names:
+                param = params_dict[name]
+                numel = param.numel()
 
-        current_idx = 0
-        for name in param_names:
-            param = params_dict[name]
-            numel = param.numel()
+                grad_slice = noisy_avg_grad[current_idx : current_idx + numel]
 
-            grad_slice = noisy_avg_grad[current_idx : current_idx + numel]
+                if param.grad is None:
+                    param.grad = grad_slice.reshape(param.shape).detach().clone()
+                else:
+                    param.grad.copy_(grad_slice.reshape(param.shape))
 
-            if param.grad is None:
-                param.grad = grad_slice.reshape(param.shape).detach().clone()
-            else:
-                param.grad.copy_(grad_slice.reshape(param.shape))
+                current_idx += numel
 
-            current_idx += numel
-
-        self.optimizer.step()
+            self.optimizer.step()
 
         with torch.no_grad():
             loss = loss_fn(self.model(x), y)
