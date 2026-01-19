@@ -104,3 +104,55 @@ def plot_learning_curve(
         plt.show()
     else:
         plt.close()
+
+
+def plot_accuracy_summary(
+    logs: Iterable[ExperimentLog],
+    dataset: str,
+    save_path: str | Path | None = None,
+    show: bool = True,
+):
+    df = logs_to_df(logs)
+    plot_df = df[df["dataset"] == dataset]
+    if plot_df.empty:
+        print(f"No results available for dataset '{dataset}'.")
+        return None
+
+    plt.figure(figsize=(7, 4))
+
+    dp_df = plot_df[plot_df["agg_epsilon"].notna()]
+    if not dp_df.empty:
+        sns.lineplot(
+            data=dp_df,
+            x="agg_epsilon",
+            y="final_acc",
+            hue="method",
+            style="batch_size",
+            markers=True,
+            dashes=False,
+            errorbar="sd",
+        )
+        plt.xscale("log")
+
+    baseline_df = plot_df[plot_df["agg_epsilon"].isna()]
+    if not baseline_df.empty:
+        grouped = baseline_df.groupby(["method", "batch_size"], dropna=False)["final_acc"]
+        for (method, batch_size), values in grouped:
+            label = f"{method}"
+            if pd.notna(batch_size):
+                label = f"{label} (bs={int(batch_size)})"
+            plt.axhline(values.mean(), linestyle="--", alpha=0.7, label=label)
+
+    plt.xlabel("Privacy budget ε")
+    plt.ylabel("Test accuracy")
+    plt.title(f"{dataset}: Accuracy vs Privacy Budget")
+    plt.tight_layout()
+
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+    else:
+        plt.close()
+
+    return plt.gca()
