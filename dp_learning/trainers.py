@@ -102,6 +102,7 @@ class DPSGDTrainer:
         dp_mechanism: str = "Naive",
         device: str = "cpu",
         seed: int = 0,
+        expected_batch_size: int | None = None,
     ) -> None:
         self.model = model.to(device)
         self.optimizer = optimizer
@@ -111,6 +112,7 @@ class DPSGDTrainer:
         self.seed = seed
         self.max_grad_norm = max_grad_norm
         self.dp_mechanism = dp_mechanism
+        self.expected_batch_size = expected_batch_size
 
         self.grad_dim = sum(p.numel() for p in self.model.parameters())
 
@@ -184,8 +186,9 @@ class DPSGDTrainer:
 
         self.step += 1
 
+        denom = self.expected_batch_size or batch_size
         noisy_avg_grad = torch.tensor(
-            noisy_sum / batch_size,
+            noisy_sum / denom,
             device=self.device,
             dtype=summed_grad.dtype,
         )

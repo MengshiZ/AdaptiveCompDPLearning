@@ -137,6 +137,7 @@ def run_experiment(
             device=config.device,
             max_grad_norm=config.max_grad_norm,
             dp_mechanism=log.dp_mechanism,
+            expected_batch_size=config.batch_size if random_batch else None,
         )
         # print(
         #     f"Running {log.method} | "
