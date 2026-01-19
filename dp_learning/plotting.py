@@ -16,6 +16,11 @@ def logs_to_df(logs: Iterable[ExperimentLog]) -> pd.DataFrame:
     for log in logs:
         if len(log.test_acc) == 0:
             continue
+        best_acc = (
+            log.best_acc
+            if log.best_acc is not None
+            else log.test_acc[-1]
+        )
         records.append(
             {
                 "dataset": log.dataset,
@@ -25,7 +30,7 @@ def logs_to_df(logs: Iterable[ExperimentLog]) -> pd.DataFrame:
                 "agg_delta": log.agg_delta,
                 "dp_mechanism": log.dp_mechanism,
                 "seed": log.seed,
-                "final_acc": log.test_acc[-1],
+                "best_acc": best_acc,
             }
         )
     return pd.DataFrame(records)
@@ -50,14 +55,14 @@ def plot_acc_vs_epsilon(
     sns.lineplot(
         data=plot_df,
         x=epsilon_column,
-        y="final_acc",
+        y="best_acc",
         hue="method",
         marker="o",
         errorbar="sd",
     )
     plt.xscale("log")
     plt.xlabel("Privacy budget ε")
-    plt.ylabel("Test accuracy")
+    plt.ylabel("Best test accuracy")
     plt.title(f"{dataset}: Accuracy vs Privacy Budget")
     plt.tight_layout()
     if save_path is not None:
@@ -140,7 +145,7 @@ def plot_accuracy_summary(
             sns.lineplot(
                 data=dp_df,
                 x="agg_epsilon",
-                y="final_acc",
+                y="best_acc",
                 hue="method",
                 style="dp_mechanism",
                 markers=True,
@@ -151,13 +156,13 @@ def plot_accuracy_summary(
 
         baseline_df = batch_df[batch_df["agg_epsilon"].isna()]
         if not baseline_df.empty:
-            grouped = baseline_df.groupby(["method"], dropna=False)["final_acc"]
+            grouped = baseline_df.groupby(["method"], dropna=False)["best_acc"]
             for method, values in grouped:
                 label = f"{method} (baseline)"
                 plt.axhline(values.mean(), linestyle="--", alpha=0.7, label=label)
 
         plt.xlabel("Privacy budget ε")
-        plt.ylabel("Test accuracy")
+        plt.ylabel("Best test accuracy")
         plt.title(f"{dataset}: Accuracy vs Privacy Budget (bs={int(batch_size)})")
         plt.tight_layout()
 
